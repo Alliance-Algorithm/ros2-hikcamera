@@ -6,21 +6,85 @@
 #include <ratio>
 #include <stdexcept>
 
-#include <opencv2/opencv.hpp>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
 #include <sdk/include/MvCameraControl.h>
 
 namespace hikcamera {
 
-class ImageCapturer {
-private:
-    void* _handle                = nullptr;
-    unsigned int ConvertDataSize = 0;
-    unsigned char* pConvertData  = nullptr;
-    MV_CC_PIXEL_CONVERT_PARAM stConvertParam;
+class ImageCapturer::Impl {
+public:
+    Impl(const CameraProfile& profile, const char* user_defined_name) {
+        auto device_info = search_camera(user_defined_name);
+        if (!device_info)
+            throw std::runtime_error{"Failed to search camera, see log for details."};
 
-    rclcpp::Logger logger_ = rclcpp::get_logger("hikcamera");
+        if (!init_camera(*device_info, profile))
+            throw std::runtime_error{"Failed to init camera, see log for details."};
+    }
+
+    ~Impl() {
+        uninit_camera();
+        if (converted_data_buffer_ != nullptr)
+            delete[] converted_data_buffer_;
+    }
+
+    cv::Mat read(std::chrono::duration<unsigned int, std::micro> timeout) {
+        MV_FRAME_OUT stImageInfo;
+
+        unsigned int ret = MV_CC_GetImageBuffer(camera_handle_, &stImageInfo, timeout.count());
+        if (ret != MV_OK) {
+            RCLCPP_ERROR(logger_, "Image getting timeout. nRet [%u]", ret);
+            throw std::runtime_error{"Failed to convert pixel type"};
+        }
+        // Only consider the situation where the size and format of each frame of image passed in by
+        // the camera remain unchanged.
+        if (converted_data_buffer_ == nullptr) {
+            if (!is_rgb_pixel_type(stImageInfo.stFrameInfo.enPixelType))
+                throw std::runtime_error{"RGB camera needed!"};
+
+            converted_data_size_ =
+                stImageInfo.stFrameInfo.nWidth * stImageInfo.stFrameInfo.nHeight * 3;
+            converted_data_buffer_ = new unsigned char[converted_data_size_];
+
+            convert_parameter_.nWidth      = stImageInfo.stFrameInfo.nWidth;    // image width
+            convert_parameter_.nHeight     = stImageInfo.stFrameInfo.nHeight;   // image height
+            convert_parameter_.nSrcDataLen = stImageInfo.stFrameInfo.nFrameLen; // input data size
+            convert_parameter_.enSrcPixelType =
+                stImageInfo.stFrameInfo.enPixelType;                        // input pixel format
+            convert_parameter_.enDstPixelType = PixelType_Gvsp_BGR8_Packed; // output pixel format
+            convert_parameter_.pDstBuffer     = converted_data_buffer_;     // output data buffer
+            convert_parameter_.nDstBufferSize = converted_data_size_;       // output buffer size
+        }
+
+        convert_parameter_.pSrcData = stImageInfo.pBufAddr;                 // input data buffer
+
+        ret = MV_CC_ConvertPixelType(camera_handle_, &convert_parameter_);
+        if (ret != MV_OK) {
+            RCLCPP_ERROR(logger_, "Failed to convert pixel type. nRet [%u]", ret);
+            throw std::runtime_error{"Failed to convert pixel type"};
+        }
+
+        // Using this constructor, cv::Mat will not automatically release the buffer, which needs to
+        // be released manually.
+        cv::Mat img{
+            stImageInfo.stFrameInfo.nHeight, stImageInfo.stFrameInfo.nWidth, CV_8UC3,
+            convert_parameter_.pDstBuffer};
+
+        // Double buffer swapness
+        MV_CC_FreeImageBuffer(camera_handle_, &stImageInfo);
+
+        return img;
+    }
+
+private:
+#define SDK_RET_ASSERT(ret, message)                          \
+    do {                                                      \
+        if (ret != MV_OK) {                                   \
+            RCLCPP_ERROR(logger_, message " nRet [%u]", ret); \
+            return false;                                     \
+        }                                                     \
+    } while (false)
 
     bool is_same_device_name(MV_CC_DEVICE_INFO* pstMVDevInfo, const char* targetName) {
         if (nullptr == pstMVDevInfo) {
@@ -39,7 +103,7 @@ private:
         return strcmp(reinterpret_cast<const char*>(deviceName), targetName) == 0;
     }
 
-    bool PrintDeviceInfo(MV_CC_DEVICE_INFO* pstMVDevInfo) {
+    bool print_device_info(MV_CC_DEVICE_INFO* pstMVDevInfo) {
         if (nullptr == pstMVDevInfo) {
             RCLCPP_ERROR(logger_, "The Pointer of pstMVDevInfo is NULL!");
             return false;
@@ -102,92 +166,56 @@ private:
         }
     }
 
-    template <typename Func>
-    struct FinalAction {
-        FinalAction(Func func)
-            : clean_{func}
-            , enabled_(true) {}
-
-        FinalAction(const FinalAction&)            = delete;
-        FinalAction& operator=(const FinalAction&) = delete;
-        FinalAction(FinalAction&&)                 = delete;
-        FinalAction& operator=(FinalAction&&)      = delete;
-
-        ~FinalAction() {
-            if (enabled_)
-                clean_();
-        }
-
-        void disable() { enabled_ = false; };
-
-    private:
-        Func clean_;
-        bool enabled_;
-    };
-
-#define SDK_RET_ASSERT(ret, message)                          \
-    do {                                                      \
-        if (ret != MV_OK) {                                   \
-            RCLCPP_ERROR(logger_, message " nRet [%u]", ret); \
-            return false;                                     \
-        }                                                     \
-    } while (false)
-
-    bool init_camera(MV_CC_DEVICE_INFO& device_info) {
+    bool init_camera(MV_CC_DEVICE_INFO& device_info, const CameraProfile& profile) {
         auto pDeviceInfo = &device_info;
 
         unsigned int ret;
 
-        ret = MV_CC_CreateHandle(&_handle, pDeviceInfo);
+        ret = MV_CC_CreateHandle(&camera_handle_, pDeviceInfo);
         SDK_RET_ASSERT(ret, "Failed to create handle.");
-        FinalAction destroy_handle{[this]() { MV_CC_DestroyHandle(_handle); }};
+        FinalAction destroy_handle{[this]() { MV_CC_DestroyHandle(camera_handle_); }};
 
-        ret = MV_CC_OpenDevice(_handle);
+        ret = MV_CC_OpenDevice(camera_handle_);
         SDK_RET_ASSERT(ret, "Failed to open device.");
-        FinalAction close_device{[this]() { MV_CC_CloseDevice(_handle); }};
+        FinalAction close_device{[this]() { MV_CC_CloseDevice(camera_handle_); }};
 
         if (pDeviceInfo->nTLayerType == MV_GIGE_DEVICE) {
-            int nPacketSize = MV_CC_GetOptimalPacketSize(_handle);
+            int nPacketSize = MV_CC_GetOptimalPacketSize(camera_handle_);
             if (nPacketSize <= 0) {
                 RCLCPP_ERROR(logger_, "Get invaild packet Size: %d", nPacketSize);
                 return false;
             }
 
-            ret = MV_CC_SetIntValue(_handle, "GevSCPSPacketSize", nPacketSize);
+            ret = MV_CC_SetIntValue(camera_handle_, "GevSCPSPacketSize", nPacketSize);
             SDK_RET_ASSERT(ret, "Failed to set packet Size.");
         }
 
-        ret = MV_CC_SetEnumValue(_handle, "TriggerMode", MV_TRIGGER_MODE_OFF);
+        ret = MV_CC_SetEnumValue(
+            camera_handle_, "TriggerMode",
+            profile.trigger_mode ? MV_TRIGGER_MODE_ON : MV_TRIGGER_MODE_OFF);
         SDK_RET_ASSERT(ret, "Failed to set trigger Mode.");
 
-        if (false) {
-            ret = MV_CC_SetBoolValue(_handle, "ReverseX", true);
-            SDK_RET_ASSERT(ret, "Failed to set reverse x.");
-            ret = MV_CC_SetBoolValue(_handle, "ReverseY", true);
-            SDK_RET_ASSERT(ret, "Failed to set reverse y.");
-        } else {
-            ret = MV_CC_SetBoolValue(_handle, "ReverseX", false);
-            SDK_RET_ASSERT(ret, "Failed to set reverse x.");
-            ret = MV_CC_SetBoolValue(_handle, "ReverseY", false);
-            SDK_RET_ASSERT(ret, "Failed to set reverse y.");
-        }
+        ret = MV_CC_SetBoolValue(camera_handle_, "ReverseX", profile.invert_image);
+        SDK_RET_ASSERT(ret, "Failed to set reverse x.");
+        ret = MV_CC_SetBoolValue(camera_handle_, "ReverseY", profile.invert_image);
+        SDK_RET_ASSERT(ret, "Failed to set reverse y.");
 
-        ret = MV_CC_SetEnumValue(_handle, "ExposureAuto", MV_EXPOSURE_AUTO_MODE_OFF);
+        ret = MV_CC_SetEnumValue(camera_handle_, "ExposureAuto", MV_EXPOSURE_AUTO_MODE_OFF);
         SDK_RET_ASSERT(ret, "Failed to set auto exposure.");
 
-        ret = MV_CC_SetFloatValue(_handle, "ExposureTime", 3000);
+        ret = MV_CC_SetFloatValue(camera_handle_, "ExposureTime", profile.exposure_time.count());
         SDK_RET_ASSERT(ret, "Failed to set exposure time.");
 
-        ret = MV_CC_SetFloatValue(_handle, "Gain", 10);
+        ret = MV_CC_SetFloatValue(camera_handle_, "Gain", profile.gain);
         SDK_RET_ASSERT(ret, "Failed to set gain.");
 
-        ret = MV_CC_SetBoolValue(_handle, "AcquisitionFrameRateEnable", false);
+        ret = MV_CC_SetBoolValue(camera_handle_, "AcquisitionFrameRateEnable", false);
         SDK_RET_ASSERT(ret, "Failed to set acquisition frame rate enable.");
 
-        ret = MV_CC_SetBayerCvtQuality(_handle, 2);
+        ret = MV_CC_SetBayerCvtQuality(camera_handle_, 2);
         SDK_RET_ASSERT(ret, "Failed to set bayer cvt quality.");
 
-        ret = MV_CC_StartGrabbing(_handle);
+        ret = MV_CC_StartGrabbing(camera_handle_);
         SDK_RET_ASSERT(ret, "Failed to start grabbing.");
 
         destroy_handle.disable();
@@ -195,7 +223,7 @@ private:
         return true;
     }
 
-    bool IsRGBCamera(MvGvspPixelType enType) {
+    bool is_rgb_pixel_type(MvGvspPixelType enType) {
         switch (enType) {
         case PixelType_Gvsp_BGR8_Packed:
         case PixelType_Gvsp_YUV422_Packed:
@@ -224,91 +252,61 @@ private:
         }
     }
 
-    void UnloadCamera() {
+    void uninit_camera() {
         unsigned int nRet;
-        nRet = MV_CC_StopGrabbing(_handle);
+        nRet = MV_CC_StopGrabbing(camera_handle_);
         if (MV_OK != nRet)
             RCLCPP_ERROR(logger_, "Failed to stop grabbing. nRet [%u]", nRet);
 
-        nRet = MV_CC_CloseDevice(_handle);
+        nRet = MV_CC_CloseDevice(camera_handle_);
         if (MV_OK != nRet)
             RCLCPP_ERROR(logger_, "Failed to close device. nRet [%u]", nRet);
 
-        nRet = MV_CC_DestroyHandle(_handle);
+        nRet = MV_CC_DestroyHandle(camera_handle_);
         if (MV_OK != nRet)
             RCLCPP_ERROR(logger_, "Failed to destroy handle. nRet [%u]", nRet);
     }
 
-public:
-    ImageCapturer(const char* userDefinedName = nullptr) {
-        auto device_info = search_camera(userDefinedName);
-        if (!device_info)
-            throw std::runtime_error{"Failed to search camera, see log for details."};
+    template <typename Func>
+    struct FinalAction {
+        FinalAction(Func func)
+            : clean_{func}
+            , enabled_(true) {}
 
-        if (!init_camera(*device_info))
-            throw std::runtime_error{"Failed to init camera, see log for details."};
-    }
-    ImageCapturer(const ImageCapturer&)            = delete;
-    ImageCapturer& operator=(const ImageCapturer&) = delete;
+        FinalAction(const FinalAction&)            = delete;
+        FinalAction& operator=(const FinalAction&) = delete;
+        FinalAction(FinalAction&&)                 = delete;
+        FinalAction& operator=(FinalAction&&)      = delete;
 
-    ~ImageCapturer() {
-        UnloadCamera();
-        if (pConvertData != nullptr)
-            delete[] pConvertData;
-    }
-
-    cv::Mat Read(std::chrono::duration<unsigned int, std::micro> timeout) {
-        MV_FRAME_OUT stImageInfo;
-
-        unsigned int ret = MV_CC_GetImageBuffer(_handle, &stImageInfo, timeout.count());
-        if (ret != MV_OK) {
-            RCLCPP_ERROR(logger_, "Image getting timeout. nRet [%u]", ret);
-            throw std::runtime_error{"Failed to convert pixel type"};
-        }
-        // 调用海康SDK进行Bayer2BGR，一定要设置BayerCvtQuality，其在windows和linux下的默认值不同
-        // 这里只考虑相机传入的每帧图像大小、格式不变的情况
-        if (pConvertData == nullptr) {
-            if (!IsRGBCamera(stImageInfo.stFrameInfo.enPixelType))
-                throw std::runtime_error{"RGB camera needed!"};
-
-            ConvertDataSize = stImageInfo.stFrameInfo.nWidth * stImageInfo.stFrameInfo.nHeight * 3;
-            pConvertData    = new unsigned char[ConvertDataSize];
-
-            stConvertParam.nWidth      = stImageInfo.stFrameInfo.nWidth;    // image width
-            stConvertParam.nHeight     = stImageInfo.stFrameInfo.nHeight;   // image height
-            stConvertParam.nSrcDataLen = stImageInfo.stFrameInfo.nFrameLen; // input data size
-            stConvertParam.enSrcPixelType =
-                stImageInfo.stFrameInfo.enPixelType;                        // input pixel format
-            stConvertParam.enDstPixelType = PixelType_Gvsp_BGR8_Packed;     // output pixel format
-            stConvertParam.pDstBuffer     = pConvertData;                   // output data buffer
-            stConvertParam.nDstBufferSize = ConvertDataSize;                // output buffer size
+        ~FinalAction() {
+            if (enabled_)
+                clean_();
         }
 
-        stConvertParam.pSrcData = stImageInfo.pBufAddr;                     // input data buffer
+        void disable() { enabled_ = false; };
 
-        ret = MV_CC_ConvertPixelType(_handle, &stConvertParam);
-        if (ret != MV_OK) {
-            RCLCPP_ERROR(logger_, "Failed to convert pixel type. nRet [%u]", ret);
-            throw std::runtime_error{"Failed to convert pixel type"};
-        }
+    private:
+        Func clean_;
+        bool enabled_;
+    };
 
-        // 注意：这是cv::Mat的一个特殊构造函数，Mat指向的图像内容不会随Mat的析构被其自动析构，处理不当会造成内存泄露
-        cv::Mat img{
-            stImageInfo.stFrameInfo.nHeight, stImageInfo.stFrameInfo.nWidth, CV_8UC3,
-            stConvertParam.pDstBuffer};
+    void* camera_handle_ = nullptr;
 
-        // 这里不涉及堆内存释放
-        MV_CC_FreeImageBuffer(_handle, &stImageInfo);
+    unsigned int converted_data_size_     = 0;
+    unsigned char* converted_data_buffer_ = nullptr;
+    MV_CC_PIXEL_CONVERT_PARAM convert_parameter_;
 
-        return img;
-    }
+    rclcpp::Logger logger_ = rclcpp::get_logger("hikcamera");
 };
 
-} // namespace hikcamera
-
-void tttest() {
-    using namespace std::chrono_literals;
-
-    hikcamera::ImageCapturer capturer;
-    capturer.Read(5s);
+ImageCapturer::ImageCapturer(const CameraProfile& profile, const char* user_defined_name) {
+    impl_ = new ImageCapturer::Impl{profile, user_defined_name};
 }
+
+ImageCapturer::~ImageCapturer() { delete impl_; }
+
+cv::Mat ImageCapturer::read(std::chrono::duration<unsigned int, std::micro> timeout) {
+    return impl_->read(timeout);
+}
+
+} // namespace hikcamera
