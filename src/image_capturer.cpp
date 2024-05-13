@@ -182,7 +182,7 @@ private:
         if (pDeviceInfo->nTLayerType == MV_GIGE_DEVICE) {
             int nPacketSize = MV_CC_GetOptimalPacketSize(camera_handle_);
             if (nPacketSize <= 0) {
-                RCLCPP_ERROR(logger_, "Get invaild packet Size: %d", nPacketSize);
+                RCLCPP_ERROR(logger_, "Get invalid packet Size: %d", nPacketSize);
                 return false;
             }
 
