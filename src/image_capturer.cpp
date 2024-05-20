@@ -29,13 +29,13 @@ public:
             delete[] converted_data_buffer_;
     }
 
-    cv::Mat read(std::chrono::duration<unsigned int, std::micro> timeout) {
+    cv::Mat read(std::chrono::duration<unsigned int, std::milli> timeout) {
         MV_FRAME_OUT stImageInfo;
 
         unsigned int ret = MV_CC_GetImageBuffer(camera_handle_, &stImageInfo, timeout.count());
         if (ret != MV_OK) {
             RCLCPP_ERROR(logger_, "Image getting timeout. nRet [%u]", ret);
-            throw std::runtime_error{"Failed to convert pixel type"};
+            throw std::runtime_error{"Image getting timeout"};
         }
         // Only consider the situation where the size and format of each frame of image passed in by
         // the camera remain unchanged.
@@ -269,7 +269,7 @@ private:
 
     template <typename Func>
     struct FinalAction {
-        FinalAction(Func func)
+        explicit FinalAction(Func func)
             : clean_{func}
             , enabled_(true) {}
 
@@ -305,7 +305,7 @@ ImageCapturer::ImageCapturer(const CameraProfile& profile, const char* user_defi
 
 ImageCapturer::~ImageCapturer() { delete impl_; }
 
-cv::Mat ImageCapturer::read(std::chrono::duration<unsigned int, std::micro> timeout) {
+cv::Mat ImageCapturer::read(std::chrono::duration<unsigned int, std::milli> timeout) {
     return impl_->read(timeout);
 }
 

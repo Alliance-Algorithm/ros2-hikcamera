@@ -39,7 +39,7 @@ public:
     ~ImageCapturer();
 
     [[nodiscard]] cv::Mat
-        read(std::chrono::duration<unsigned int, std::micro> timeout = std::chrono::seconds(5));
+        read(std::chrono::duration<unsigned int, std::milli> timeout = std::chrono::seconds(5));
 
 private:
     class Impl;
