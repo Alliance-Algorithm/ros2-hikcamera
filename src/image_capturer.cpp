@@ -171,7 +171,7 @@ private:
 
         unsigned int ret;
 
-        ret = MV_CC_CreateHandle(&camera_handle_, pDeviceInfo);
+        ret = MV_CC_CreateHandleWithoutLog(&camera_handle_, pDeviceInfo);
         SDK_RET_ASSERT(ret, "Failed to create handle.");
         FinalAction destroy_handle{[this]() { MV_CC_DestroyHandle(camera_handle_); }};
 
