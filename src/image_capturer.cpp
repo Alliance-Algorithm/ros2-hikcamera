@@ -5,6 +5,7 @@
 #include <chrono>
 #include <ratio>
 #include <stdexcept>
+#include <tuple>
 
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
@@ -21,12 +22,23 @@ public:
 
         if (!init_camera(*device_info, profile))
             throw std::runtime_error{"Failed to init camera, see log for details."};
+
+        try {
+            using namespace std::chrono_literals;
+            read(1000ms);
+        } catch (...) {
+            this->~Impl();
+            throw;
+        }
     }
 
     ~Impl() {
         uninit_camera();
-        if (converted_data_buffer_ != nullptr)
-            delete[] converted_data_buffer_;
+        delete[] converted_data_buffer_;
+    }
+
+    std::tuple<int, int> get_image_size() const {
+        return {convert_parameter_.nWidth, convert_parameter_.nHeight};
     }
 
     cv::Mat read(std::chrono::duration<unsigned int, std::milli> timeout) {
@@ -80,7 +92,7 @@ public:
 private:
 #define SDK_RET_ASSERT(ret, message)                          \
     do {                                                      \
-        if (ret != MV_OK) {                                   \
+        if ((ret) != MV_OK) {                                 \
             RCLCPP_ERROR(logger_, message " nRet [%u]", ret); \
             return false;                                     \
         }                                                     \
@@ -109,10 +121,10 @@ private:
             return false;
         }
         if (pstMVDevInfo->nTLayerType == MV_GIGE_DEVICE) {
-            int nIp1 = ((pstMVDevInfo->SpecialInfo.stGigEInfo.nCurrentIp & 0xff000000) >> 24);
-            int nIp2 = ((pstMVDevInfo->SpecialInfo.stGigEInfo.nCurrentIp & 0x00ff0000) >> 16);
-            int nIp3 = ((pstMVDevInfo->SpecialInfo.stGigEInfo.nCurrentIp & 0x0000ff00) >> 8);
-            int nIp4 = (pstMVDevInfo->SpecialInfo.stGigEInfo.nCurrentIp & 0x000000ff);
+            unsigned nIp1 = ((pstMVDevInfo->SpecialInfo.stGigEInfo.nCurrentIp & 0xff000000) >> 24);
+            unsigned nIp2 = ((pstMVDevInfo->SpecialInfo.stGigEInfo.nCurrentIp & 0x00ff0000) >> 16);
+            unsigned nIp3 = ((pstMVDevInfo->SpecialInfo.stGigEInfo.nCurrentIp & 0x0000ff00) >> 8);
+            unsigned nIp4 = (pstMVDevInfo->SpecialInfo.stGigEInfo.nCurrentIp & 0x000000ff);
             RCLCPP_INFO(logger_, "DeviceIp: %d.%d.%d.%d", nIp1, nIp2, nIp3, nIp4);
             RCLCPP_INFO(
                 logger_, "UserDefinedName: %s",
@@ -223,7 +235,7 @@ private:
         return true;
     }
 
-    bool is_rgb_pixel_type(MvGvspPixelType enType) {
+    static bool is_rgb_pixel_type(MvGvspPixelType enType) {
         switch (enType) {
         case PixelType_Gvsp_BGR8_Packed:
         case PixelType_Gvsp_YUV422_Packed:
@@ -309,4 +321,5 @@ cv::Mat ImageCapturer::read(std::chrono::duration<unsigned int, std::milli> time
     return impl_->read(timeout);
 }
 
+std::tuple<int, int> ImageCapturer::get_width_height() const { return impl_->get_image_size(); }
 } // namespace hikcamera

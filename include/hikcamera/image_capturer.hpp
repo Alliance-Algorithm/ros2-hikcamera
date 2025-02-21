@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <ratio>
+#include <tuple>
 
 #include <opencv2/core/mat.hpp>
 
@@ -30,7 +31,7 @@ public:
         float gain;
     };
 
-    ImageCapturer(
+    explicit ImageCapturer(
         const CameraProfile& profile = CameraProfile{}, const char* user_defined_name = nullptr);
 
     ImageCapturer(const ImageCapturer&)            = delete;
@@ -40,6 +41,8 @@ public:
 
     [[nodiscard]] cv::Mat
         read(std::chrono::duration<unsigned int, std::milli> timeout = std::chrono::seconds(5));
+
+    [[nodiscard]] std::tuple<int, int> get_width_height() const;
 
 private:
     class Impl;
