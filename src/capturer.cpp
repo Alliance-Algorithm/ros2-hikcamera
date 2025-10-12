@@ -9,6 +9,8 @@ auto Camera::initialize(Profile const& profile) noexcept
         return std::unexpected{result.error()};
 }
 
+auto Camera::initialized() const noexcept -> bool { return pimpl->camera_handler != nullptr; }
+
 auto Camera::reset_connection() noexcept -> void {}
 
 auto Camera::get_size() const noexcept -> std::expected<cv::Size2i, std::string_view> {

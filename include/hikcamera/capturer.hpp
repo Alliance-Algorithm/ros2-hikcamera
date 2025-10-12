@@ -4,14 +4,14 @@
 #include <opencv2/core/mat.hpp>
 
 namespace hikcamera {
-using Milli = std::chrono::duration<float, std::milli>;
+using Milli = std::chrono::milliseconds;
 
 struct Profile final {
     float exposure_ms = 2.;
     float gain = 16.9807; // Max for our camera
     float frame_rate = 80.;
 
-    Milli timeout{1.0};
+    Milli timeout{2};
 
     bool trigger_mode = false;
     bool invert_image = false;
@@ -22,6 +22,8 @@ class Camera final {
 public:
     auto initialize(const Profile& profile = {}) noexcept
         -> std::expected<std::string, std::string>;
+
+    auto initialized() const noexcept -> bool;
 
     auto reset_connection() noexcept -> void;
 
