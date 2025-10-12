@@ -59,13 +59,13 @@ public:
                 stImageInfo.stFrameInfo.nWidth * stImageInfo.stFrameInfo.nHeight * 3;
             converted_data_buffer_ = new unsigned char[converted_data_size_];
 
-            convert_parameter_.nWidth      = stImageInfo.stFrameInfo.nWidth;    // image width
-            convert_parameter_.nHeight     = stImageInfo.stFrameInfo.nHeight;   // image height
+            convert_parameter_.nWidth = stImageInfo.stFrameInfo.nWidth;         // image width
+            convert_parameter_.nHeight = stImageInfo.stFrameInfo.nHeight;       // image height
             convert_parameter_.nSrcDataLen = stImageInfo.stFrameInfo.nFrameLen; // input data size
             convert_parameter_.enSrcPixelType =
                 stImageInfo.stFrameInfo.enPixelType;                        // input pixel format
             convert_parameter_.enDstPixelType = PixelType_Gvsp_BGR8_Packed; // output pixel format
-            convert_parameter_.pDstBuffer     = converted_data_buffer_;     // output data buffer
+            convert_parameter_.pDstBuffer = converted_data_buffer_;         // output data buffer
             convert_parameter_.nDstBufferSize = converted_data_size_;       // output buffer size
         }
 
@@ -317,10 +317,10 @@ private:
             : clean_{func}
             , enabled_(true) {}
 
-        FinalAction(const FinalAction&)            = delete;
+        FinalAction(const FinalAction&) = delete;
         FinalAction& operator=(const FinalAction&) = delete;
-        FinalAction(FinalAction&&)                 = delete;
-        FinalAction& operator=(FinalAction&&)      = delete;
+        FinalAction(FinalAction&&) = delete;
+        FinalAction& operator=(FinalAction&&) = delete;
 
         ~FinalAction() {
             if (enabled_)
@@ -336,7 +336,7 @@ private:
 
     void* camera_handle_ = nullptr;
 
-    unsigned int converted_data_size_     = 0;
+    unsigned int converted_data_size_ = 0;
     unsigned char* converted_data_buffer_ = nullptr;
     MV_CC_PIXEL_CONVERT_PARAM convert_parameter_;
 
