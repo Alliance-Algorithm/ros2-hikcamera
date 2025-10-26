@@ -1,10 +1,10 @@
 #include "capturer.impl.hpp"
 
-auto Camera::initialize(Profile const& profile) noexcept
+auto Camera::initialize(const Config& config) noexcept //
     -> std::expected<std::string, std::string> {
 
-    if (auto result = utility::search_device())
-        return pimpl->initialize(*result.value(), profile);
+    if (auto result = util::search_device())
+        return pimpl->initialize(*result.value(), config);
     else
         return std::unexpected{result.error()};
 }
@@ -21,10 +21,9 @@ auto Camera::get_size() const noexcept -> std::expected<cv::Size2i, std::string_
     return cv::Size2i{context.nWidth, context.nHeight};
 }
 
-auto Camera::read_image_with_expected() noexcept -> std::expected<cv::Mat, std::string> {}
-
-/// @throw std::runtime_error
-auto Camera::read_image_with_exception() -> cv::Mat {}
+auto Camera::read_image() noexcept -> std::expected<cv::Mat, std::string> {
+    return pimpl->read_image_with_expected();
+}
 
 Camera::Camera() noexcept
     : pimpl{std::make_unique<Impl>()} {}

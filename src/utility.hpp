@@ -2,6 +2,8 @@
 #include "errors.hpp"
 #include "sdk/include/MvCameraControl.h"
 
+#include <experimental/scope>
+
 #include <cstring>
 #include <expected>
 #include <format>
@@ -17,31 +19,30 @@ using FrameOut = MV_FRAME_OUT;
 
 using ConvertParam = MV_CC_PIXEL_CONVERT_PARAM;
 
+namespace key {
+constexpr auto GevSCPSPacketSize = "GevSCPSPacketSize";
+constexpr auto ExposureAuto = "ExposureAuto";
+constexpr auto AcquisitionFrameRateEnable = "AcquisitionFrameRateEnable";
+constexpr auto ReverseX = "ReverseX";
+constexpr auto ReverseY = "ReverseY";
+constexpr auto ExposureTime = "ExposureTime";
+constexpr auto Gain = "Gain";
+constexpr auto TriggerMode = "TriggerMode";
+constexpr auto TriggerSource = "TriggerSource";
+} // namespace key
+
 } // namespace hikcamera::sdk
 
-namespace hikcamera::utility {
+namespace hikcamera::util {
 
-template <typename F>
-struct DelayRun final {
-    bool enable = true;
-    std::decay_t<F> function;
-
-    explicit DelayRun(F&& f) noexcept
-        : function{std::forward<F>(f)} {}
-
-    auto cancel() { enable = false; }
-
-    ~DelayRun() noexcept {
-        if (enable)
-            function();
-    }
-};
+template <typename Ef>
+using scope_exit = std::experimental::scope_exit<Ef>;
 
 template <typename... Args>
 constexpr auto make_unexpected(std::format_string<Args...> fmt, Args&&... args) noexcept {
     return std::unexpected{std::format(fmt, std::forward<Args>(args)...)};
 }
-constexpr auto make_unexpected(std::string_view msg, std::uint32_t error) noexcept {
+constexpr auto make_unexpected_with_error(std::string_view msg, std::uint32_t error) noexcept {
     return std::unexpected{std::format("{}: {}", msg, translate_error(error))};
 }
 
@@ -165,4 +166,4 @@ constexpr auto make_information(const sdk::DeviceInfo& info) noexcept -> std::st
     return result;
 }
 
-} // namespace hikcamera::utility
+} // namespace hikcamera::util
