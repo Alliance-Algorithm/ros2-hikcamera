@@ -119,6 +119,8 @@ struct Camera::Impl final {
 
     auto initialize(const Config& config) -> std::expected<std::string, std::string> {
 
+        timeout_ms = config.timeout_ms;
+
         auto result = util::search_device();
         if (!result.has_value())
             return std::unexpected{result.error()};

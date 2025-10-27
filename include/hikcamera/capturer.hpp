@@ -7,7 +7,7 @@ static constexpr auto kMaxGain = float{16.9807};
 
 struct Config final {
 
-    unsigned int timeout_ms = 2;
+    unsigned int timeout_ms = 2000;
 
     float exposure_us = 2000.;
     float framerate = 80;
