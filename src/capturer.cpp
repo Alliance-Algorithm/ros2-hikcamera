@@ -2,16 +2,14 @@
 
 auto Camera::initialize(const Config& config) noexcept //
     -> std::expected<std::string, std::string> {
-
-    if (auto result = util::search_device())
-        return pimpl->initialize(*result.value(), config);
-    else
-        return std::unexpected{result.error()};
+    return pimpl->initialize(config);
 }
 
 auto Camera::initialized() const noexcept -> bool { return pimpl->camera_handler != nullptr; }
 
-auto Camera::reset_connection() noexcept -> void {}
+auto Camera::deinitialize() noexcept -> std::expected<void, std::string> {
+    return pimpl->deinitialize();
+}
 
 auto Camera::get_size() const noexcept -> std::expected<cv::Size2i, std::string_view> {
     if (pimpl->buffer_size == 0) {

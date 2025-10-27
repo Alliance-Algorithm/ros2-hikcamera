@@ -1,24 +1,23 @@
 #pragma once
-#include <chrono>
 #include <expected>
 #include <opencv2/core/mat.hpp>
 
 namespace hikcamera {
-using Milli = std::chrono::milliseconds;
+static constexpr auto kMaxGain = float{16.9807};
 
 struct Config final {
 
-    static constexpr auto kMaxGain = float{16.9807};
+    unsigned int timeout_ms = 2;
 
-    float exposure_ms = 2.;
+    float exposure_us = 2000.;
+    float framerate = 80;
     float gain = kMaxGain;
-    float frame_rate = 80.;
 
-    Milli timeout{2};
-
-    bool trigger_mode = false;
     bool invert_image = false;
     bool software_sync = false;
+
+    bool trigger_mode = false;
+    bool fixed_framerate = true;
 };
 
 class Camera final {
@@ -27,9 +26,9 @@ public:
     auto initialize(const Config& config = {}) noexcept //
         -> std::expected<std::string, std::string>;
 
-    auto initialized() const noexcept -> bool;
+    auto deinitialize() noexcept -> std::expected<void, std::string>;
 
-    auto reset_connection() noexcept -> void;
+    auto initialized() const noexcept -> bool;
 
     auto get_size() const noexcept -> std::expected<cv::Size2i, std::string_view>;
 

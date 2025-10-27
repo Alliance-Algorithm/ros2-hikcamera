@@ -10,6 +10,27 @@
 #include <string_view>
 
 namespace hikcamera::sdk {
+
+constexpr auto OK = MV_OK;
+
+enum class ExposureAutoMode {
+    OFF = MV_EXPOSURE_AUTO_MODE_OFF,
+    ONCE = MV_EXPOSURE_AUTO_MODE_ONCE,
+    CONTINUOUS = MV_EXPOSURE_AUTO_MODE_CONTINUOUS,
+};
+enum class TriggerMode {
+    ON = MV_TRIGGER_MODE_ON,
+    OFF = MV_TRIGGER_MODE_OFF,
+};
+enum class TriggerSource {
+    LINE0 = MV_TRIGGER_SOURCE_LINE0,
+    LINE1 = MV_TRIGGER_SOURCE_LINE1,
+    LINE2 = MV_TRIGGER_SOURCE_LINE2,
+    LINE3 = MV_TRIGGER_SOURCE_LINE3,
+
+    SOFTWARE = MV_TRIGGER_SOURCE_SOFTWARE,
+};
+
 using Handler = void*;
 
 using DeviceInfo = MV_CC_DEVICE_INFO;
@@ -23,6 +44,7 @@ namespace key {
 constexpr auto GevSCPSPacketSize = "GevSCPSPacketSize";
 constexpr auto ExposureAuto = "ExposureAuto";
 constexpr auto AcquisitionFrameRateEnable = "AcquisitionFrameRateEnable";
+constexpr auto AcquisitionFrameRate = "AcquisitionFrameRate";
 constexpr auto ReverseX = "ReverseX";
 constexpr auto ReverseY = "ReverseY";
 constexpr auto ExposureTime = "ExposureTime";
@@ -99,7 +121,7 @@ constexpr auto compare(sdk::DeviceInfo const& info, std::string_view other) noex
     }
 }
 
-constexpr auto search_device(std::string_view custom_definition = {}) noexcept
+inline auto search_device(std::string_view custom_definition = {}) noexcept
     -> std::expected<sdk::DeviceInfo*, std::string> {
 
     auto devices = sdk::DeviceInfoList{};
@@ -136,7 +158,7 @@ constexpr auto search_device(std::string_view custom_definition = {}) noexcept
     return std::unexpected{"Unreachable result"};
 }
 
-constexpr auto make_information(const sdk::DeviceInfo& info) noexcept -> std::string {
+inline auto make_information(const sdk::DeviceInfo& info) noexcept -> std::string {
     auto result = std::string{};
 
     if (info.nTLayerType == MV_GIGE_DEVICE) {
