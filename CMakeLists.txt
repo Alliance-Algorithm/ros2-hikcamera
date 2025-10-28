@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(hikcamera)
+project(hikcamera VERSION 2.0.0)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,18 +13,10 @@ ament_auto_find_build_dependencies(REQUIRED)
 find_package(OpenCV 4.5 REQUIRED)
 link_directories(src/sdk/lib)
 
-include_directories(
-    include
-    src
-)
-set(
-    PROJECT_SOURCES
-    src/capturer.cpp
-    src/image_capturer.cpp
-)
+include_directories(include src)
 ament_auto_add_library (
     ${PROJECT_NAME} SHARED
-    ${PROJECT_SOURCES}
+    src/capturer.cpp
 )
 target_link_libraries(
     ${PROJECT_NAME}

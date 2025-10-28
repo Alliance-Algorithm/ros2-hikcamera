@@ -90,11 +90,11 @@ struct Camera::Impl final {
     }
 
     auto read_image_with_expected() noexcept -> std::expected<cv::Mat, std::string> {
+        if (camera_handler == nullptr)
+            return std::unexpected{"Attempted to read from an uninitialized camera"};
+
         auto info = sdk::FrameOut{};
         auto code = std::uint32_t{};
-
-        if (camera_handler == nullptr)
-            return std::unexpected{"Attempted to read from an initialized camera"};
 
         code = MV_CC_GetImageBuffer(camera_handler, &info, timeout_ms);
         if (code != sdk::OK)
@@ -117,9 +117,10 @@ struct Camera::Impl final {
         return generate_mat(info);
     }
 
-    auto initialize(const Config& config) -> std::expected<std::string, std::string> {
+    auto initialize(const Config& config) -> std::expected<void, std::string> {
 
         timeout_ms = config.timeout_ms;
+        auto guard_handler = util::scope_exit{[this] { camera_handler = nullptr; }};
 
         auto result = util::search_device();
         if (!result.has_value())
@@ -196,13 +197,14 @@ struct Camera::Impl final {
         if (sdk::OK != (code = MV_CC_StartGrabbing(camera_handler)))
             return util::make_unexpected_with_error("Failed to start grabbing", code);
 
-        guard_destroy.release();
         guard_close.release();
+        guard_destroy.release();
+        guard_handler.release();
 
-        return util::make_information(*device);
+        return {};
     }
 
-    auto deinitialize() const noexcept -> std::expected<void, std::string> {
+    auto deinitialize() noexcept -> std::expected<void, std::string> {
         if (auto ret = MV_CC_StopGrabbing(camera_handler); ret != sdk::OK)
             return util::make_unexpected_with_error("Failed to stop grabbing:", ret);
 
@@ -212,6 +214,7 @@ struct Camera::Impl final {
         if (auto ret = MV_CC_DestroyHandle(camera_handler); ret != sdk::OK)
             return util::make_unexpected_with_error("Failed to destory handle:", ret);
 
+        camera_handler = nullptr;
         return {};
     }
 };

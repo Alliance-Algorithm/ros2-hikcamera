@@ -1,7 +1,7 @@
 #include "capturer.impl.hpp"
 
 auto Camera::initialize(const Config& config) noexcept //
-    -> std::expected<std::string, std::string> {
+    -> std::expected<void, std::string> {
     return pimpl->initialize(config);
 }
 

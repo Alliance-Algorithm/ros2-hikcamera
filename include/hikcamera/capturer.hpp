@@ -24,7 +24,7 @@ class Camera final {
 public:
     // @note: Default it enough for most situation
     auto initialize(const Config& config = {}) noexcept //
-        -> std::expected<std::string, std::string>;
+        -> std::expected<void, std::string>;
 
     auto deinitialize() noexcept -> std::expected<void, std::string>;
 
@@ -32,6 +32,7 @@ public:
 
     auto get_size() const noexcept -> std::expected<cv::Size2i, std::string_view>;
 
+    /// @note: It takes time and will return before timeout.
     auto read_image() noexcept -> std::expected<cv::Mat, std::string>;
 
 public:
