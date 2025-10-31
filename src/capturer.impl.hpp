@@ -5,6 +5,7 @@
 #include "utility.hpp"
 
 #include <expected>
+#include <filesystem>
 
 using namespace hikcamera;
 
@@ -19,7 +20,13 @@ struct Camera::Impl final {
 
     unsigned int timeout_ms;
 
-    ~Impl() noexcept { std::ignore = deinitialize(); }
+    ~Impl() noexcept {
+        std::ignore = deinitialize();
+        try {
+            std::filesystem::remove_all("./MvSdkLog");
+            std::filesystem::remove_all("./MvFGSdkLog");
+        } catch (...) {}
+    }
 
     template <typename T>
     auto set(char const* key, T value) noexcept -> std::expected<void, std::string> {
@@ -118,6 +125,7 @@ struct Camera::Impl final {
     }
 
     auto initialize(const Config& config) -> std::expected<void, std::string> {
+        auto code = std::uint32_t{};
 
         timeout_ms = config.timeout_ms;
         auto guard_handler = util::scope_exit{[this] { camera_handler = nullptr; }};
@@ -129,8 +137,6 @@ struct Camera::Impl final {
         auto device = result.value();
         if (device == nullptr)
             return std::unexpected{"Null device was got by searching"};
-
-        auto code = std::uint32_t{};
 
         // Create and open device
         if (sdk::OK != (code = MV_CC_CreateHandleWithoutLog(&camera_handler, device)))
@@ -152,6 +158,7 @@ struct Camera::Impl final {
 
         // Fixed initialize method
         {
+
             if (sdk::OK != (code = MV_CC_SetBayerCvtQuality(camera_handler, 2)))
                 return util::make_unexpected_with_error("Failed to set bayer cvt quality", code);
 
@@ -205,6 +212,8 @@ struct Camera::Impl final {
     }
 
     auto deinitialize() noexcept -> std::expected<void, std::string> {
+        auto on_exit = util::scope_exit{[this] { camera_handler = nullptr; }};
+
         if (auto ret = MV_CC_StopGrabbing(camera_handler); ret != sdk::OK)
             return util::make_unexpected_with_error("Failed to stop grabbing:", ret);
 
@@ -214,7 +223,6 @@ struct Camera::Impl final {
         if (auto ret = MV_CC_DestroyHandle(camera_handler); ret != sdk::OK)
             return util::make_unexpected_with_error("Failed to destory handle:", ret);
 
-        camera_handler = nullptr;
         return {};
     }
 };
