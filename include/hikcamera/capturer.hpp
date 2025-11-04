@@ -1,12 +1,12 @@
 #pragma once
+#include <chrono>
 #include <expected>
 #include <opencv2/core/mat.hpp>
 
 namespace hikcamera {
 static constexpr auto kMaxGain = float{16.9807};
 
-struct Config final {
-
+struct Config {
     unsigned int timeout_ms = 2000;
 
     float exposure_us = 2000.;
@@ -20,27 +20,41 @@ struct Config final {
     bool fixed_framerate = true;
 };
 
-class Camera final {
+class Camera {
 public:
-    // @note: Default it enough for most situation
-    auto initialize(const Config& config = {}) noexcept //
-        -> std::expected<void, std::string>;
+    struct Image {
+        using Clock = std::chrono::steady_clock;
+        using Stamp = Clock::time_point;
 
-    auto deinitialize() noexcept -> std::expected<void, std::string>;
+        cv::Mat mat;
+        Stamp timestamp;
+    };
 
-    auto initialized() const noexcept -> bool;
-
-    auto get_size() const noexcept -> std::expected<cv::Size2i, std::string_view>;
-
-    /// @note: It takes time and will return before timeout.
-    auto read_image() noexcept -> std::expected<cv::Mat, std::string>;
-
-public:
     explicit Camera() noexcept;
     ~Camera() noexcept;
 
     Camera(const Camera&) = delete;
     Camera& operator=(const Camera&) = delete;
+
+    auto configure(const Config&) noexcept -> void;
+
+    auto connect() noexcept -> std::expected<void, std::string>;
+
+    auto disconnect() noexcept -> std::expected<void, std::string>;
+
+    auto connected() const noexcept -> bool;
+
+    /// @note: It takes time and will return before timeout.
+    auto read_image() noexcept -> std::expected<cv::Mat, std::string>;
+    auto read_image_with_timestamp() noexcept -> std::expected<Image, std::string>;
+
+    /// Alias
+    ///
+    auto initialize(const Config& config) noexcept -> std::expected<void, std::string> {
+        configure(config);
+        return connect();
+    }
+    auto deinitialize() noexcept -> std::expected<void, std::string> { return disconnect(); }
 
 private:
     struct Impl;

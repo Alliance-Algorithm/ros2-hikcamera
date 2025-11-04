@@ -20,11 +20,14 @@ struct Camera::Impl final {
 
     unsigned int timeout_ms;
 
+    std::optional<Config> config;
+
     ~Impl() noexcept {
-        std::ignore = deinitialize();
+        std::ignore = disconnect();
         try {
             std::filesystem::remove_all("./MvSdkLog");
             std::filesystem::remove_all("./MvFGSdkLog");
+            std::filesystem::remove_all("./$(ALLUSERSPROFILE)");
         } catch (...) {}
     }
 
@@ -96,7 +99,7 @@ struct Camera::Impl final {
         };
     }
 
-    auto read_image_with_expected() noexcept -> std::expected<cv::Mat, std::string> {
+    auto read_image() noexcept -> std::expected<cv::Mat, std::string> {
         if (camera_handler == nullptr)
             return std::unexpected{"Attempted to read from an uninitialized camera"};
 
@@ -123,11 +126,27 @@ struct Camera::Impl final {
 
         return generate_mat(info);
     }
+    auto read_image_with_timestamp() noexcept -> std::expected<Image, std::string> {
+        if (auto result = read_image()) {
+            return Image{
+                .mat = result.value(),
+                .timestamp = Image::Clock::now(),
+            };
+        } else {
+            return std::unexpected{result.error()};
+        }
+    }
 
-    auto initialize(const Config& config) -> std::expected<void, std::string> {
+    auto configure(const Config& _config) noexcept { config = _config; }
+
+    auto connect() -> std::expected<void, std::string> {
+        if (!config.has_value()) {
+            return std::unexpected{"Need configure"};
+        }
+
         auto code = std::uint32_t{};
 
-        timeout_ms = config.timeout_ms;
+        timeout_ms = config->timeout_ms;
         auto guard_handler = util::scope_exit{[this] { camera_handler = nullptr; }};
 
         auto result = util::search_device();
@@ -168,31 +187,31 @@ struct Camera::Impl final {
 
         // initialize using config
         {
-            if (auto ret = set(sdk::key::ReverseX, config.invert_image); !ret)
+            if (auto ret = set(sdk::key::ReverseX, config->invert_image); !ret)
                 return std::unexpected{ret.error()};
 
-            if (auto ret = set(sdk::key::ReverseY, config.invert_image); !ret)
+            if (auto ret = set(sdk::key::ReverseY, config->invert_image); !ret)
                 return std::unexpected{ret.error()};
 
-            if (auto ret = set(sdk::key::ExposureTime, config.exposure_us); !ret)
+            if (auto ret = set(sdk::key::ExposureTime, config->exposure_us); !ret)
                 return std::unexpected{ret.error()};
 
-            if (auto ret = set(sdk::key::Gain, config.gain); !ret)
+            if (auto ret = set(sdk::key::Gain, config->gain); !ret)
                 return std::unexpected{ret.error()};
 
-            auto trigger_mode = config.trigger_mode ? sdk::TriggerMode::ON : sdk::TriggerMode::OFF;
+            auto trigger_mode = config->trigger_mode ? sdk::TriggerMode::ON : sdk::TriggerMode::OFF;
             if (auto ret = set(sdk::key::TriggerMode, trigger_mode); !ret)
                 return std::unexpected{ret.error()};
 
-            if (config.software_sync)
+            if (config->software_sync)
                 if (auto ret = set(sdk::key::TriggerSource, sdk::TriggerSource::SOFTWARE); !ret)
                     return std::unexpected{ret.error()};
 
-            if (config.fixed_framerate) {
+            if (config->fixed_framerate) {
                 if (auto ret = set(sdk::key::AcquisitionFrameRateEnable, true); !ret)
                     return std::unexpected{ret.error()};
 
-                if (auto ret = set(sdk::key::AcquisitionFrameRate, config.framerate); !ret)
+                if (auto ret = set(sdk::key::AcquisitionFrameRate, config->framerate); !ret)
                     return std::unexpected{ret.error()};
             } else {
                 if (auto ret = set(sdk::key::AcquisitionFrameRateEnable, false); !ret)
@@ -211,7 +230,7 @@ struct Camera::Impl final {
         return {};
     }
 
-    auto deinitialize() noexcept -> std::expected<void, std::string> {
+    auto disconnect() noexcept -> std::expected<void, std::string> {
         auto on_exit = util::scope_exit{[this] { camera_handler = nullptr; }};
 
         if (auto ret = MV_CC_StopGrabbing(camera_handler); ret != sdk::OK)
