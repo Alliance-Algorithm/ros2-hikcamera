@@ -12,11 +12,14 @@ using namespace hikcamera;
 struct Camera::Impl final {
     using Byte = unsigned char;
 
+    constexpr static auto kBufferSize = 5;
+
     sdk::ConvertParam convert_context;
     sdk::Handler camera_handler;
 
-    std::vector<Byte> buffer;
+    std::array<std::vector<Byte>, kBufferSize> buffers;
     std::size_t buffer_size = 0;
+    std::size_t buffer_index = 0;
 
     unsigned int timeout_ms;
 
@@ -31,74 +34,6 @@ struct Camera::Impl final {
         } catch (...) {}
     }
 
-    template <typename T>
-    auto set(char const* key, T value) noexcept -> std::expected<void, std::string> {
-        if (camera_handler == nullptr) {
-            std::unexpected{"Camera has not been initialized"};
-        }
-
-        auto result = std::uint32_t{};
-        auto printable = std::string{};
-        /*  */ if constexpr (std::same_as<T, bool>) {
-            result = MV_CC_SetBoolValue(camera_handler, key, value);
-            printable = std::to_string(value);
-        } else if constexpr (std::same_as<T, int>) {
-            result = MV_CC_SetIntValue(camera_handler, key, value);
-            printable = std::to_string(value);
-        } else if constexpr (std::floating_point<T>) {
-            result = MV_CC_SetFloatValue(camera_handler, key, value);
-            printable = std::to_string(value);
-        } else if constexpr (std::is_enum_v<T>) {
-            result = MV_CC_SetEnumValue(camera_handler, key, std::to_underlying(value));
-            printable = "enum underlying " + std::to_string(std::to_underlying(value));
-        } else {
-            static_assert(false, "Unknown type of value");
-        }
-
-        if (result != sdk::OK) {
-            const auto translated = translate_error(result);
-            return util::make_unexpected(
-                "Failed to set '{}' with {}: {}", key, printable, translated);
-        }
-        return {};
-    }
-
-    auto update_convert_context(sdk::FrameOut const& info) noexcept
-        -> std::expected<void, std::string_view> {
-
-        if (!util::is_rgb_pixel_type(info.stFrameInfo.enPixelType)) {
-            return std::unexpected{"Camera must has RGB channel"};
-        }
-
-        auto& frame_info = info.stFrameInfo;
-        buffer_size = frame_info.nWidth * frame_info.nHeight * 3;
-        buffer.reserve(buffer_size);
-
-        convert_context.nWidth = frame_info.nWidth;
-        convert_context.nHeight = frame_info.nHeight;
-        convert_context.nSrcDataLen = frame_info.nFrameLen;
-
-        convert_context.enSrcPixelType = frame_info.enPixelType;
-        convert_context.enDstPixelType = PixelType_Gvsp_BGR8_Packed;
-
-        convert_context.pDstBuffer = buffer.data();
-        convert_context.nDstBufferSize = buffer_size;
-
-        return {};
-    }
-
-    auto generate_mat(const sdk::FrameOut& source_info) const {
-        // TODO:
-        // Every mat shares the same memory buffer.
-        // We may need a memory pool, for async process.
-        return cv::Mat{
-            source_info.stFrameInfo.nHeight,
-            source_info.stFrameInfo.nWidth,
-            CV_8UC3,
-            convert_context.pDstBuffer,
-        };
-    }
-
     auto read_image() noexcept -> std::expected<cv::Mat, std::string> {
         if (camera_handler == nullptr)
             return std::unexpected{"Attempted to read from an uninitialized camera"};
@@ -109,6 +44,8 @@ struct Camera::Impl final {
         code = MV_CC_GetImageBuffer(camera_handler, &info, timeout_ms);
         if (code != sdk::OK)
             return util::make_unexpected_with_error("Failed to get image buffer", code);
+        auto guard =
+            util::scope_exit{[&] { std::ignore = MV_CC_FreeImageBuffer(camera_handler, &info); }};
 
         if (buffer_size == 0) {
             if (auto result = update_convert_context(info); !result) {
@@ -118,14 +55,14 @@ struct Camera::Impl final {
         }
 
         convert_context.pSrcData = info.pBufAddr;
+        convert_context.pDstBuffer = buffers[fetch_and_update_buffer_index()].data();
         code = MV_CC_ConvertPixelType(camera_handler, &convert_context);
         if (code != sdk::OK)
             return util::make_unexpected_with_error("Failed to convert image", code);
 
-        std::ignore = MV_CC_FreeImageBuffer(camera_handler, &info);
-
         return generate_mat(info);
     }
+
     auto read_image_with_timestamp() noexcept -> std::expected<Image, std::string> {
         if (auto result = read_image()) {
             return Image{
@@ -140,6 +77,10 @@ struct Camera::Impl final {
     auto configure(const Config& _config) noexcept { config = _config; }
 
     auto connect() -> std::expected<void, std::string> {
+        if (camera_handler != nullptr) {
+            std::ignore = disconnect();
+        }
+
         if (!config.has_value()) {
             return std::unexpected{"Need configure"};
         }
@@ -172,7 +113,7 @@ struct Camera::Impl final {
                 return std::unexpected{"Invalid packet size"};
 
             if (auto ret = set(sdk::key::GevSCPSPacketSize, size); !ret)
-                return std::unexpected{"Failed to set packet size"};
+                return std::unexpected{"Failed to set packet size | " + ret.error()};
         }
 
         // Fixed initialize method
@@ -243,5 +184,76 @@ struct Camera::Impl final {
             return util::make_unexpected_with_error("Failed to destory handle:", ret);
 
         return {};
+    }
+
+private:
+    auto fetch_and_update_buffer_index() noexcept -> std::size_t {
+        const auto current = buffer_index;
+        buffer_index = (buffer_index + 1) % kBufferSize;
+        return current;
+    }
+
+    template <typename T>
+    auto set(char const* key, T value) noexcept -> std::expected<void, std::string> {
+        if (camera_handler == nullptr) {
+            std::unexpected{"Camera has not been initialized"};
+        }
+
+        auto result = std::uint32_t{};
+        auto printable = std::string{};
+        /*  */ if constexpr (std::same_as<T, bool>) {
+            result = MV_CC_SetBoolValue(camera_handler, key, value);
+            printable = std::to_string(value);
+        } else if constexpr (std::same_as<T, int>) {
+            result = MV_CC_SetIntValue(camera_handler, key, value);
+            printable = std::to_string(value);
+        } else if constexpr (std::floating_point<T>) {
+            result = MV_CC_SetFloatValue(camera_handler, key, value);
+            printable = std::to_string(value);
+        } else if constexpr (std::is_enum_v<T>) {
+            result = MV_CC_SetEnumValue(camera_handler, key, std::to_underlying(value));
+            printable = "enum underlying " + std::to_string(std::to_underlying(value));
+        } else {
+            static_assert(false, "Unknown type of value");
+        }
+
+        if (result != sdk::OK) {
+            const auto translated = translate_error(result);
+            return util::make_unexpected(
+                "Failed to set '{}' with {}: {}", key, printable, translated);
+        }
+        return {};
+    }
+
+    auto update_convert_context(sdk::FrameOut const& info) noexcept
+        -> std::expected<void, std::string_view> {
+
+        if (!util::is_rgb_pixel_type(info.stFrameInfo.enPixelType)) {
+            return std::unexpected{"Camera must has RGB channel"};
+        }
+
+        auto& frame_info = info.stFrameInfo;
+        buffer_size = frame_info.nWidth * frame_info.nHeight * 3;
+        std::ranges::for_each(buffers, [this](auto& buffer) { buffer.resize(buffer_size); });
+
+        convert_context.nWidth = frame_info.nWidth;
+        convert_context.nHeight = frame_info.nHeight;
+        convert_context.nSrcDataLen = frame_info.nFrameLen;
+
+        convert_context.enSrcPixelType = frame_info.enPixelType;
+        convert_context.enDstPixelType = PixelType_Gvsp_BGR8_Packed;
+
+        convert_context.nDstBufferSize = buffer_size;
+
+        return {};
+    }
+
+    auto generate_mat(const sdk::FrameOut& source_info) const -> cv::Mat {
+        return {
+            source_info.stFrameInfo.nHeight,
+            source_info.stFrameInfo.nWidth,
+            CV_8UC3,
+            convert_context.pDstBuffer,
+        };
     }
 };
