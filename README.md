@@ -14,7 +14,7 @@ git clone https://github.com/Alliance-Algorithm/ros2-hikcamera.git src/hikcamera
 # 使用 ROS2 工具构建
 colcon build --packages-select hikcamera --symlink-install --merge-install
 
-# 或者，或者使用 RMCS 脚本
+# 或者使用 RMCS 脚本
 build-rmcs --packages-select hikcamera
 ```
 
