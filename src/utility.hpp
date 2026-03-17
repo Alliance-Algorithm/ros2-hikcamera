@@ -51,6 +51,9 @@ constexpr auto ExposureTime = "ExposureTime";
 constexpr auto Gain = "Gain";
 constexpr auto TriggerMode = "TriggerMode";
 constexpr auto TriggerSource = "TriggerSource";
+constexpr auto StrobeEnable = "StrobeEnable";
+constexpr auto LineSelector = "LineSelector";
+constexpr auto LineSource = "LineSource";
 } // namespace key
 
 } // namespace hikcamera::sdk

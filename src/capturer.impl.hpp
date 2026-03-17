@@ -148,6 +148,13 @@ struct Camera::Impl final {
                 if (auto ret = set(sdk::key::TriggerSource, sdk::TriggerSource::SOFTWARE); !ret)
                     return std::unexpected{ret.error()};
 
+            if (auto ret = set_enum_by_string(sdk::key::LineSelector, "Line1"); !ret)
+                return std::unexpected{ret.error()};
+            if (auto ret = set(sdk::key::StrobeEnable, true); !ret)
+                return std::unexpected{ret.error()};
+            if (auto ret = set_enum_by_string(sdk::key::LineSource, "ExposureStartActive"); !ret)
+                return std::unexpected{ret.error()};
+
             if (config->fixed_framerate) {
                 if (auto ret = set(sdk::key::AcquisitionFrameRateEnable, true); !ret)
                     return std::unexpected{ret.error()};
@@ -221,6 +228,21 @@ private:
             const auto translated = translate_error(result);
             return util::make_unexpected(
                 "Failed to set '{}' with {}: {}", key, printable, translated);
+        }
+        return {};
+    }
+
+    auto set_enum_by_string(char const* key, char const* value) noexcept
+        -> std::expected<void, std::string> {
+        if (camera_handler == nullptr) {
+            std::unexpected{"Camera has not been initialized"};
+        }
+
+        const auto result = MV_CC_SetEnumValueByString(camera_handler, key, value);
+        if (result != sdk::OK) {
+            const auto translated = translate_error(result);
+            return util::make_unexpected(
+                "Failed to set '{}' with '{}': {}", key, value, translated);
         }
         return {};
     }
