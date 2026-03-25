@@ -6,6 +6,8 @@
 
 #include <expected>
 #include <filesystem>
+#include <format>
+#include <iostream>
 
 using namespace hikcamera;
 
@@ -261,6 +263,7 @@ private:
         convert_context.nWidth = frame_info.nWidth;
         convert_context.nHeight = frame_info.nHeight;
         convert_context.nSrcDataLen = frame_info.nFrameLen;
+        std::cerr << std::format("W/H: {}, {}\n", frame_info.nWidth, frame_info.nHeight);
 
         convert_context.enSrcPixelType = frame_info.enPixelType;
         convert_context.enDstPixelType = PixelType_Gvsp_BGR8_Packed;
