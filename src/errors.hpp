@@ -1,5 +1,5 @@
 #pragma once
-#include "sdk/include/MvErrorDefine.h"
+#include <MvErrorDefine.h>
 
 #include <cstdint>
 #include <string_view>

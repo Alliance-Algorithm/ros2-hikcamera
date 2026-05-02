@@ -11,20 +11,36 @@ find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies(REQUIRED)
 
 find_package(OpenCV 4.5 REQUIRED)
-link_directories(src/sdk/lib)
 
-include_directories(include src)
-ament_auto_add_library (
-    ${PROJECT_NAME} SHARED
-    src/capturer.cpp
+if(CMAKE_SYSROOT)
+  set(HIK_MVS_SDK_ROOT "${CMAKE_SYSROOT}/opt/mvs-usb3-core")
+else()
+  set(HIK_MVS_SDK_ROOT "/opt/mvs-usb3-core")
+endif()
+
+find_package(MVSUSB3Core REQUIRED CONFIG
+  PATHS "${HIK_MVS_SDK_ROOT}" NO_DEFAULT_PATH
 )
+
+ament_auto_add_library(
+  ${PROJECT_NAME} SHARED
+  src/capturer.cpp
+)
+
+target_include_directories(
+  ${PROJECT_NAME}
+  PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+  PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 target_link_libraries(
-    ${PROJECT_NAME}
-    ${OpenCV_LIBS}
-    MvCameraControl
+  ${PROJECT_NAME}
+  PRIVATE
+  ${OpenCV_LIBS}
+  MVSUSB3Core::MVSUSB3Core
 )
-install(
-    DIRECTORY src/sdk/lib/
-    DESTINATION lib
-)
+
 ament_auto_package()

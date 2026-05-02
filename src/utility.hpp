@@ -1,6 +1,6 @@
 #pragma once
 #include "errors.hpp"
-#include "sdk/include/MvCameraControl.h"
+#include <MvCameraControl.h>
 
 #include <experimental/scope>
 
