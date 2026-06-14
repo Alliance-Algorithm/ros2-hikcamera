@@ -160,6 +160,42 @@ struct Camera::Impl final {
             }
         }
 
+        // White balance
+        {
+            if (auto ret = set(sdk::key::BalanceWhiteAuto,
+                    static_cast<sdk::AutoWhiteBalance>(config->auto_white_balance)); !ret)
+                return std::unexpected{ret.error()};
+
+            if (config->auto_white_balance == 0) {
+                if (sdk::OK != (code = MV_CC_SetEnumValue(
+                        camera_handler, sdk::key::BalanceRatioSelector, 0)))
+                    return util::make_unexpected_with_error("Failed to select red ratio", code);
+                if (sdk::OK != (code = MV_CC_SetIntValue(
+                        camera_handler, sdk::key::BalanceRatio, config->white_balance_red)))
+                    return util::make_unexpected_with_error("Failed to set red ratio", code);
+
+                if (sdk::OK != (code = MV_CC_SetEnumValue(
+                        camera_handler, sdk::key::BalanceRatioSelector, 1)))
+                    return util::make_unexpected_with_error("Failed to select green ratio", code);
+                if (sdk::OK != (code = MV_CC_SetIntValue(
+                        camera_handler, sdk::key::BalanceRatio, config->white_balance_green)))
+                    return util::make_unexpected_with_error("Failed to set green ratio", code);
+
+                if (sdk::OK != (code = MV_CC_SetEnumValue(
+                        camera_handler, sdk::key::BalanceRatioSelector, 2)))
+                    return util::make_unexpected_with_error("Failed to select blue ratio", code);
+                if (sdk::OK != (code = MV_CC_SetIntValue(
+                        camera_handler, sdk::key::BalanceRatio, config->white_balance_blue)))
+                    return util::make_unexpected_with_error("Failed to set blue ratio", code);
+            }
+        }
+
+        if (auto ret = set(sdk::key::Brightness, config->brightness); !ret)
+            return std::unexpected{ret.error()};
+
+        if (auto ret = set(sdk::key::Sharpness, config->sharpness); !ret)
+            return std::unexpected{ret.error()};
+
         // Start grabbing image
         if (sdk::OK != (code = MV_CC_StartGrabbing(camera_handler)))
             return util::make_unexpected_with_error("Failed to start grabbing", code);
@@ -213,6 +249,9 @@ private:
         } else if constexpr (std::is_enum_v<T>) {
             result = MV_CC_SetEnumValue(camera_handler, key, std::to_underlying(value));
             printable = "enum underlying " + std::to_string(std::to_underlying(value));
+        } else if constexpr (std::same_as<T, unsigned int>) {
+            result = MV_CC_SetIntValue(camera_handler, key, static_cast<int>(value));
+            printable = std::to_string(value);
         } else {
             static_assert(false, "Unknown type of value");
         }

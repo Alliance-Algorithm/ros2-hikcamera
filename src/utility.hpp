@@ -14,12 +14,12 @@ namespace hikcamera::sdk {
 constexpr auto OK = MV_OK;
 
 enum class ExposureAutoMode {
-    OFF = MV_EXPOSURE_AUTO_MODE_OFF,
-    ONCE = MV_EXPOSURE_AUTO_MODE_ONCE,
+    OFF        = MV_EXPOSURE_AUTO_MODE_OFF,
+    ONCE       = MV_EXPOSURE_AUTO_MODE_ONCE,
     CONTINUOUS = MV_EXPOSURE_AUTO_MODE_CONTINUOUS,
 };
 enum class TriggerMode {
-    ON = MV_TRIGGER_MODE_ON,
+    ON  = MV_TRIGGER_MODE_ON,
     OFF = MV_TRIGGER_MODE_OFF,
 };
 enum class TriggerSource {
@@ -30,10 +30,14 @@ enum class TriggerSource {
 
     SOFTWARE = MV_TRIGGER_SOURCE_SOFTWARE,
 };
-
+enum class AutoWhiteBalance {
+    OFF        = MV_BALANCEWHITE_AUTO_OFF,
+    ONCE       = MV_BALANCEWHITE_AUTO_ONCE,
+    CONTINUOUS = MV_BALANCEWHITE_AUTO_CONTINUOUS,
+};
 using Handler = void*;
 
-using DeviceInfo = MV_CC_DEVICE_INFO;
+using DeviceInfo     = MV_CC_DEVICE_INFO;
 using DeviceInfoList = MV_CC_DEVICE_INFO_LIST;
 
 using FrameOut = MV_FRAME_OUT;
@@ -41,16 +45,21 @@ using FrameOut = MV_FRAME_OUT;
 using ConvertParam = MV_CC_PIXEL_CONVERT_PARAM;
 
 namespace key {
-constexpr auto GevSCPSPacketSize = "GevSCPSPacketSize";
-constexpr auto ExposureAuto = "ExposureAuto";
-constexpr auto AcquisitionFrameRateEnable = "AcquisitionFrameRateEnable";
-constexpr auto AcquisitionFrameRate = "AcquisitionFrameRate";
-constexpr auto ReverseX = "ReverseX";
-constexpr auto ReverseY = "ReverseY";
-constexpr auto ExposureTime = "ExposureTime";
-constexpr auto Gain = "Gain";
-constexpr auto TriggerMode = "TriggerMode";
-constexpr auto TriggerSource = "TriggerSource";
+    constexpr auto GevSCPSPacketSize          = "GevSCPSPacketSize";
+    constexpr auto ExposureAuto               = "ExposureAuto";
+    constexpr auto AcquisitionFrameRateEnable = "AcquisitionFrameRateEnable";
+    constexpr auto AcquisitionFrameRate       = "AcquisitionFrameRate";
+    constexpr auto ReverseX                   = "ReverseX";
+    constexpr auto ReverseY                   = "ReverseY";
+    constexpr auto ExposureTime               = "ExposureTime";
+    constexpr auto Gain                       = "Gain";
+    constexpr auto TriggerMode                = "TriggerMode";
+    constexpr auto TriggerSource              = "TriggerSource";
+    constexpr auto BalanceWhiteAuto           = "BalanceWhiteAuto";
+    constexpr auto BalanceRatioSelector       = "BalanceRatioSelector";
+    constexpr auto BalanceRatio               = "BalanceRatio";
+    constexpr auto Brightness                 = "Brightness";
+    constexpr auto Sharpness                  = "Sharpness";
 } // namespace key
 
 } // namespace hikcamera::sdk
@@ -62,10 +71,10 @@ using scope_exit = std::experimental::scope_exit<Ef>;
 
 template <typename... Args>
 constexpr auto make_unexpected(std::format_string<Args...> fmt, Args&&... args) noexcept {
-    return std::unexpected{std::format(fmt, std::forward<Args>(args)...)};
+    return std::unexpected { std::format(fmt, std::forward<Args>(args)...) };
 }
 constexpr auto make_unexpected_with_error(std::string_view msg, std::uint32_t error) noexcept {
-    return std::unexpected{std::format("{}: {}", msg, translate_error(error))};
+    return std::unexpected { std::format("{}: {}", msg, translate_error(error)) };
 }
 
 constexpr auto is_rgb_pixel_type(MvGvspPixelType type) noexcept -> bool {
@@ -92,8 +101,10 @@ constexpr auto is_rgb_pixel_type(MvGvspPixelType type) noexcept -> bool {
     case PixelType_Gvsp_BayerRG12:
     case PixelType_Gvsp_BayerRG12_Packed:
     case PixelType_Gvsp_BayerGR12:
-    case PixelType_Gvsp_BayerGR12_Packed: return true;
-    default: return false;
+    case PixelType_Gvsp_BayerGR12_Packed:
+        return true;
+    default:
+        return false;
     }
 }
 
@@ -111,7 +122,8 @@ constexpr auto compare(sdk::DeviceInfo const& info, std::string_view other) noex
         raw_name = special.stUsb3VInfo.chUserDefinedName;
         break;
     }
-    default: return false;
+    default:
+        return false;
     }
 
     if (const auto device_name = reinterpret_cast<char const*>(raw_name)) {
@@ -121,45 +133,44 @@ constexpr auto compare(sdk::DeviceInfo const& info, std::string_view other) noex
     }
 }
 
-inline auto search_device(std::string_view custom_definition = {}) noexcept
+inline auto search_device(std::string_view custom_definition = { }) noexcept
     -> std::expected<sdk::DeviceInfo*, std::string> {
 
-    auto devices = sdk::DeviceInfoList{};
+    auto devices = sdk::DeviceInfoList { };
     std::memset(&devices, 0, sizeof(devices));
 
     const auto result = MV_CC_EnumDevices(MV_GIGE_DEVICE | MV_USB_DEVICE, &devices);
     if (result != MV_OK) {
         const auto msg = translate_error(result);
-        return std::unexpected{std::format("Failed to enum device: {}", msg)};
+        return std::unexpected { std::format("Failed to enum device: {}", msg) };
     }
 
     const auto [device_num, device_infos] = devices;
     if (device_num == 0) {
-        return std::unexpected{"No device was found"};
+        return std::unexpected { "No device was found" };
     }
     if (custom_definition.empty()) {
         if (device_num == 1 && device_infos[0] != nullptr) {
             return device_infos[0];
         } else {
-            return std::unexpected{std::format("{} devices were found", device_num)};
+            return std::unexpected { std::format("{} devices were found", device_num) };
         }
     } else {
         for (auto index = 0; index < device_num; index++) {
             auto* info_ptr = device_infos[index];
-            if (info_ptr == nullptr)
-                continue;
+            if (info_ptr == nullptr) continue;
             if (compare(*info_ptr, custom_definition)) {
                 return info_ptr;
             }
         }
-        return std::unexpected{
-            std::format("No device matches the custom name among {} devices", device_num)};
+        return std::unexpected { std::format(
+            "No device matches the custom name among {} devices", device_num) };
     }
-    return std::unexpected{"Unreachable result"};
+    return std::unexpected { "Unreachable result" };
 }
 
 inline auto make_information(const sdk::DeviceInfo& info) noexcept -> std::string {
-    auto result = std::string{};
+    auto result = std::string { };
 
     if (info.nTLayerType == MV_GIGE_DEVICE) {
         const auto& gige = info.SpecialInfo.stGigEInfo;

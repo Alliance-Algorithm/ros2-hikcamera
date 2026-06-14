@@ -4,19 +4,25 @@
 #include <opencv2/core/mat.hpp>
 
 namespace hikcamera {
-static constexpr auto kMaxGain = float{16.9807};
+static constexpr auto kMaxGain = float { 16.9807 };
 
 struct Config {
     unsigned int timeout_ms = 2000;
 
-    float exposure_us = 2000.;
-    float framerate = 80;
-    float gain = kMaxGain;
+    float exposure_us                = 2000.;
+    float framerate                  = 80;
+    float gain                       = kMaxGain;
+    unsigned int auto_white_balance  = 0;
+    unsigned int white_balance_red   = 512;
+    unsigned int white_balance_green = 512;
+    unsigned int white_balance_blue  = 512;
+    unsigned int brightness          = 512;
+    unsigned int sharpness           = 512;
 
-    bool invert_image = false;
+    bool invert_image  = false;
     bool software_sync = false;
 
-    bool trigger_mode = false;
+    bool trigger_mode    = false;
     bool fixed_framerate = true;
 };
 
@@ -33,7 +39,7 @@ public:
     explicit Camera() noexcept;
     ~Camera() noexcept;
 
-    Camera(const Camera&) = delete;
+    Camera(const Camera&)            = delete;
     Camera& operator=(const Camera&) = delete;
 
     auto configure(const Config&) noexcept -> void;
