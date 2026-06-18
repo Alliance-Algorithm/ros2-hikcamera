@@ -7,24 +7,36 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 11)
 
-find_package(ament_cmake_auto REQUIRED)
-ament_auto_find_build_dependencies(REQUIRED)
-
+find_package(ament_cmake REQUIRED)
 find_package(OpenCV 4.5 REQUIRED)
-link_directories(src/sdk/lib)
 
-include_directories(include src)
-ament_auto_add_library (
-    ${PROJECT_NAME} SHARED
+add_library(${PROJECT_NAME} SHARED
     src/capturer.cpp
 )
-target_link_libraries(
-    ${PROJECT_NAME}
+
+target_include_directories(${PROJECT_NAME} PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+    $<INSTALL_INTERFACE:include/hikcamera>
+)
+
+target_link_directories(${PROJECT_NAME} PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/sdk/lib>
+    $<INSTALL_INTERFACE:lib>
+)
+
+target_link_libraries(${PROJECT_NAME}
     ${OpenCV_LIBS}
     MvCameraControl
 )
-install(
-    DIRECTORY src/sdk/lib/
-    DESTINATION lib
+
+install(TARGETS ${PROJECT_NAME}
+    EXPORT ${PROJECT_NAME}_export
+    LIBRARY DESTINATION lib
 )
-ament_auto_package()
+install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY src/sdk/lib/ DESTINATION lib)
+
+ament_export_targets(${PROJECT_NAME}_export HAS_LIBRARY_TARGET)
+ament_export_include_directories(include)
+ament_package()
