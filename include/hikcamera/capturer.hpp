@@ -7,17 +7,17 @@ namespace hikcamera {
 static constexpr auto kMaxGain = float { 16.9807 };
 
 struct Config {
-    unsigned int timeout_ms = 2000;
+    int timeout_ms = 2000;
 
-    float exposure_us                = 2000.;
-    float framerate                  = 80;
-    float gain                       = kMaxGain;
-    unsigned int auto_white_balance  = 0;
-    unsigned int white_balance_red   = 512;
-    unsigned int white_balance_green = 512;
-    unsigned int white_balance_blue  = 512;
-    unsigned int brightness          = 512;
-    unsigned int sharpness           = 512;
+    float exposure_us           = 2000.;
+    float framerate             = 80;
+    float gain                  = kMaxGain;
+    int auto_white_balance      = 0;
+    int white_balance_red       = 512;
+    int white_balance_green     = 512;
+    int white_balance_blue      = 512;
+    int brightness              = 512;
+    int sharpness               = 512;
 
     bool invert_image  = false;
     bool software_sync = false;
