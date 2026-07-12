@@ -66,7 +66,7 @@ auto SHMRead(int shm_fd, cv::Mat& out_mat, std::chrono::steady_clock::time_point
         auto read_index = (image_shm->read_index) % SLOT_NUM;
         auto& frame     = image_shm->imagedata[read_index];
         out_mat         = cv::Mat(height, width, CV_8UC3, frame).clone();
-        out_ts          = image_shm->timestamp[image_shm->read_index];
+        out_ts          = image_shm->timestamp[read_index];
     } else {
         pthread_mutex_unlock(&image_shm->mutex);
         munmap(image_shm, sizeof(imageSHM));
