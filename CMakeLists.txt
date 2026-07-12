@@ -12,6 +12,7 @@ find_package(OpenCV 4.5 REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
     src/capturer.cpp
+    src/shm.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
