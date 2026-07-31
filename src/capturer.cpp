@@ -1,5 +1,10 @@
 #include "capturer.impl.hpp"
 
+auto hikcamera::list_camera_names() noexcept
+    -> std::expected<std::vector<std::string>, std::string> {
+    return util::list_camera_names();
+}
+
 auto Camera::configure(const Config& config) noexcept -> void { pimpl->configure(config); }
 
 auto Camera::connect() noexcept -> std::expected<void, std::string> { return pimpl->connect(); }

@@ -2,12 +2,16 @@
 #include <chrono>
 #include <expected>
 #include <opencv2/core/mat.hpp>
+#include <string>
+#include <vector>
 
 namespace hikcamera {
 static constexpr auto kMaxGain = float{16.9807};
 
 struct Config {
     unsigned int timeout_ms = 2000;
+
+    std::string camera_name = {};
 
     float exposure_us = 2000.;
     float framerate = 80;
@@ -19,6 +23,10 @@ struct Config {
     bool trigger_mode = false;
     bool fixed_framerate = true;
 };
+
+/// Enumerate currently visible Hik cameras and return each device's UserDefinedName.
+/// Empty/null names are returned as empty strings.
+auto list_camera_names() noexcept -> std::expected<std::vector<std::string>, std::string>;
 
 class Camera {
 public:

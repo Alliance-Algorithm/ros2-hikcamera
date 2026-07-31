@@ -8,6 +8,7 @@
 #include <expected>
 #include <format>
 #include <string_view>
+#include <vector>
 
 namespace hikcamera::sdk {
 
@@ -119,6 +120,50 @@ constexpr auto compare(sdk::DeviceInfo const& info, std::string_view other) noex
     } else {
         return false;
     }
+}
+
+inline auto device_user_defined_name(sdk::DeviceInfo const& info) noexcept -> std::string {
+    unsigned char const* raw_name = nullptr;
+
+    switch (info.nTLayerType) {
+    case MV_GIGE_DEVICE:
+        raw_name = info.SpecialInfo.stGigEInfo.chUserDefinedName;
+        break;
+    case MV_USB_DEVICE:
+        raw_name = info.SpecialInfo.stUsb3VInfo.chUserDefinedName;
+        break;
+    default:
+        return {};
+    }
+
+    if (raw_name == nullptr) {
+        return {};
+    }
+    return reinterpret_cast<char const*>(raw_name);
+}
+
+inline auto list_camera_names() noexcept
+    -> std::expected<std::vector<std::string>, std::string> {
+    auto devices = sdk::DeviceInfoList{};
+    std::memset(&devices, 0, sizeof(devices));
+
+    const auto result = MV_CC_EnumDevices(MV_GIGE_DEVICE | MV_USB_DEVICE, &devices);
+    if (result != MV_OK) {
+        return std::unexpected{
+            std::format("Failed to enum device: {}", translate_error(result))};
+    }
+
+    auto names = std::vector<std::string>{};
+    names.reserve(devices.nDeviceNum);
+    for (unsigned int index = 0; index < devices.nDeviceNum; ++index) {
+        auto* info_ptr = devices.pDeviceInfo[index];
+        if (info_ptr == nullptr) {
+            names.emplace_back();
+            continue;
+        }
+        names.emplace_back(device_user_defined_name(*info_ptr));
+    }
+    return names;
 }
 
 inline auto search_device(std::string_view custom_definition = {}) noexcept
